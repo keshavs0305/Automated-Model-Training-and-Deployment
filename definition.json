@@ -1,0 +1,72 @@
+{
+  "StartAt": "Join Data",
+  "States": {
+    "Join Data": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:ap-south-1:996973542545:function:s31",
+      "Next": "Train Model"
+    },
+    "Train Model": {
+      "Resource": "arn:aws:states:::sagemaker:createTrainingJob.sync",
+      "Parameters": {
+        "AlgorithmSpecification": {
+          "TrainingImage": "991648021394.dkr.ecr.ap-south-1.amazonaws.com/xgboost:latest",
+          "TrainingInputMode": "File"
+        },
+        "OutputDataConfig": {
+          "S3OutputPath": "s3://stepfn-model-output/"
+        },
+        "StoppingCondition": {
+          "MaxRuntimeInSeconds": 86400
+        },
+        "ResourceConfig": {
+          "InstanceCount": 1,
+          "InstanceType": "ml.m5.4xlarge",
+          "VolumeSizeInGB": 30
+        },
+        "RoleArn": "arn:aws:iam::996973542545:role/StepFunctionsSample-SageM-MachineLearningWorkflowE-34EY3XI3MV7B",
+        "InputDataConfig": [
+          {
+            "DataSource": {
+              "S3DataSource": {
+                "S3DataDistributionType": "ShardedByS3Key",
+                "S3DataType": "S3Prefix",
+                "S3Uri": "s3://level0-data/input_data/"
+              }
+            },
+            "ChannelName": "train",
+            "ContentType": "text/csv"
+          }
+        ],
+        "HyperParameters": {
+          "objective": "reg:linear",
+          "eval_metric": "rmse",
+          "num_round": "5"
+        },
+        "TrainingJobName.$": "$$.Execution.Name"
+      },
+      "Type": "Task",
+      "Next": "Save Model"
+    },
+    "Save Model": {
+      "Parameters": {
+        "PrimaryContainer": {
+          "Image": "991648021394.dkr.ecr.ap-south-1.amazonaws.com/xgboost:latest",
+          "Environment": {},
+          "ModelDataUrl.$": "$.ModelArtifacts.S3ModelArtifacts"
+        },
+        "ExecutionRoleArn": "arn:aws:iam::996973542545:role/StepFunctionsSample-SageM-MachineLearningWorkflowE-34EY3XI3MV7B",
+        "ModelName.$": "$.TrainingJobName"
+      },
+      "Resource": "arn:aws:states:::sagemaker:createModel",
+      "Type": "Task",
+      "ResultPath": "$.taskresult",
+      "Next": "Deploy Model"
+    },
+    "Deploy Model": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:ap-south-1:996973542545:function:my-s3-function-role",
+      "End": true
+    }
+  }
+}
